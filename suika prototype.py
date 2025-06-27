@@ -129,7 +129,7 @@ def merge(f1, f2):
     if f1.kind < len(FRUITS) - 1:
         return Fruit(f1.kind + 1, (f1.x + f2.x) / 2, (f1.y + f2.y) / 2)
     # If both are watermelons, merging returns nothing (they disappear)
-    return None
+    return  None
 
 def collide(f1, f2):
     dist = math.hypot(f1.x - f2.x, f1.y - f2.y)
@@ -172,9 +172,11 @@ next_kind = random.randint(0, 4)
 current_kind = random.randint(0, 4)
 current_fruit = Fruit(current_kind, JAR_LEFT + JAR_WIDTH // 2, JAR_TOP - 40)
 game_over = False
+game_over_triggered = False
+game_over_time = 0
 score = 0
-drop_cooldown = 2000  # milliseconds (1 seconds)
-last_drop_time = pygame.time.get_ticks() - drop_cooldown  # allow immediate first drop
+drop_cooldown = 2000
+last_drop_time = pygame.time.get_ticks() - drop_cooldown
 
 state = STATE_MENU
 running = True
@@ -249,7 +251,7 @@ while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     game_over = True
-                if event.type == pygame.KEYDOWN:
+                if event.type == pygame.KEYDOWN and not game_over_triggered:
                     if event.key == pygame.K_LEFT:
                         current_fruit.x -= 20
                         if current_fruit.x - current_fruit.radius < JAR_LEFT:
@@ -268,71 +270,81 @@ while running:
                             next_kind = random.randint(0, 4)  # Only allow cherry to persimmon
                             last_drop_time = now
 
-            # --- MERGE LOGIC ---
-            merged_indices = set()
-            new_fruits = []
-            for i in range(len(fruits)):
-                for j in range(i + 1, len(fruits)):
-                    if i in merged_indices or j in merged_indices:
-                        continue
-                    if fruits[i].kind == fruits[j].kind and collide(fruits[i], fruits[j]):
-                        # Merge fruits regardless of velocity or landed status
-                        new_fruit = merge(fruits[i], fruits[j])
-                        if new_fruit:
-                            new_fruits.append(new_fruit)
+            # Only update game logic if not in game over freeze
+            if not game_over_triggered:
+                # --- MERGE LOGIC ---
+                merged_indices = set()
+                new_fruits = []
+                for i in range(len(fruits)):
+                    for j in range(i + 1, len(fruits)):
+                        if i in merged_indices or j in merged_indices:
+                            continue
+                        if fruits[i].kind == fruits[j].kind and collide(fruits[i], fruits[j]):
+                            # Merge fruits regardless of velocity or landed status
+                            new_fruit = merge(fruits[i], fruits[j])
+                            if new_fruit:
+                                new_fruits.append(new_fruit)
+                                score += 10 * (new_fruit.kind + 1)
+
                             merged_indices.add(i)
                             merged_indices.add(j)
-                            score += 10 * (new_fruit.kind + 1)
 
-            # Remove merged fruits and add new ones
-            for idx in sorted(merged_indices, reverse=True):
-                del fruits[idx]
-            fruits.extend(new_fruits)
+                # Remove merged fruits and add new ones
+                for idx in sorted(merged_indices, reverse=True):
+                    del fruits[idx]
+                fruits.extend(new_fruits)
 
-            # --- PRIORITY LOOP: walls -> collisions ---
-            max_priority_passes = 5
-            priority_pass = 0
-            while priority_pass < max_priority_passes:
-                # 1. Resolve wall collisions
-                wall_bounced = False
+                # --- PRIORITY LOOP: walls -> collisions ---
+                max_priority_passes = 5
+                priority_pass = 0
+                while priority_pass < max_priority_passes:
+                    # 1. Resolve wall collisions
+                    wall_bounced = False
+                    for fruit in fruits:
+                        if fruit.x - fruit.radius < JAR_LEFT:
+                            fruit.x = JAR_LEFT + fruit.radius
+                            fruit.vx = -fruit.vx * 0.7  # Reduced bounce damping for quicker gameplay
+                            wall_bounced = True
+                        if fruit.x + fruit.radius > JAR_RIGHT:
+                            fruit.x = JAR_RIGHT - fruit.radius
+                            fruit.vx = -fruit.vx * 0.7
+                            wall_bounced = True
+                    if wall_bounced:
+                        priority_pass += 1
+                        continue  # After wall bounce, check collisions again
+
+                    # 2. Resolve fruit-to-fruit collisions
+                    collision_happened = False
+                    fruits_copy = fruits[:]
+                    for i in range(len(fruits_copy)):
+                        for j in range(i + 1, len(fruits_copy)):
+                            if i >= len(fruits) or j >= len(fruits):
+                                break
+                            before = (fruits[i].x, fruits[i].y, fruits[j].x, fruits[j].y)
+                            resolve_collision(fruits[i], fruits[j])
+                            after = (fruits[i].x, fruits[i].y, fruits[j].x, fruits[j].y)
+                            if before != after:
+                                collision_happened = True
+                    if collision_happened:
+                        priority_pass += 1
+                        continue  # After collision, check walls again
+
+                    break  # If nothing happened, exit the loop
+
+                # Update fruits
                 for fruit in fruits:
-                    if fruit.x - fruit.radius < JAR_LEFT:
-                        fruit.x = JAR_LEFT + fruit.radius
-                        fruit.vx = -fruit.vx * 0.7  # Reduced bounce damping for quicker gameplay
-                        wall_bounced = True
-                    if fruit.x + fruit.radius > JAR_RIGHT:
-                        fruit.x = JAR_RIGHT - fruit.radius
-                        fruit.vx = -fruit.vx * 0.7
-                        wall_bounced = True
-                if wall_bounced:
-                    priority_pass += 1
-                    continue  # After wall bounce, check collisions again
+                    fruit.update(fruits)
 
-                # 2. Resolve fruit-to-fruit collisions
-                collision_happened = False
-                fruits_copy = fruits[:]
-                for i in range(len(fruits_copy)):
-                    for j in range(i + 1, len(fruits_copy)):
-                        if i >= len(fruits) or j >= len(fruits):
-                            break
-                        before = (fruits[i].x, fruits[i].y, fruits[j].x, fruits[j].y)
-                        resolve_collision(fruits[i], fruits[j])
-                        after = (fruits[i].x, fruits[i].y, fruits[j].x, fruits[j].y)
-                        if before != after:
-                            collision_happened = True
-                if collision_happened:
-                    priority_pass += 1
-                    continue  # After collision, check walls again
+                # --- GAME OVER CHECK ---
+                for fruit in fruits:
+                    if fruit.landed and fruit.y - fruit.radius < JAR_TOP + 10:
+                        game_over_triggered = True
+                        game_over_time = pygame.time.get_ticks()
+                        break
 
-                break  # If nothing happened, exit the loop
-
-            # Update fruits
-            for fruit in fruits:
-                fruit.update(fruits)
-
-            # --- GAME OVER CHECK ---
-            for fruit in fruits:
-                if fruit.landed and fruit.y - fruit.radius < JAR_TOP + 10:
+            # Check if 5 seconds have passed since game over was triggered
+            if game_over_triggered:
+                if pygame.time.get_ticks() - game_over_time >= 5000:  # 5 seconds
                     game_over = True
 
             # Draw everything
@@ -342,49 +354,60 @@ while running:
             pygame.draw.rect(screen, (60, 60, 60), (JAR_LEFT, JAR_TOP, JAR_WIDTH, JAR_HEIGHT), 0)
             pygame.draw.rect(screen, (200, 200, 200), (JAR_LEFT, JAR_TOP, JAR_WIDTH, JAR_HEIGHT), 5)
             pygame.draw.rect(screen, (255, 100, 100), (JAR_LEFT, JAR_TOP, JAR_WIDTH, 10))  # visual top
-
+        
             # Draw fruits
             for fruit in fruits:
                 fruit.draw(screen)
-            current_fruit.draw(screen)
+            if not game_over_triggered:
+                current_fruit.draw(screen)
 
-            # Draw cooldown indicator (to the right of jar, near top)
-            now = pygame.time.get_ticks()
-            cooldown_ratio = min(1, (now - last_drop_time) / drop_cooldown)
-            indicator_radius = 30
-            indicator_center = (JAR_RIGHT + 60, JAR_TOP + 40)
-            pygame.draw.circle(screen, (100, 100, 100), indicator_center, indicator_radius, 3)
-            if cooldown_ratio < 1:
-                # Draw cooldown fill (arc)
-                end_angle = -math.pi / 2 + 2 * math.pi * cooldown_ratio
-                pygame.draw.arc(
+            # Draw cooldown indicator (to the right of jar, near top) - only if not game over
+            if not game_over_triggered:
+                now = pygame.time.get_ticks()
+                cooldown_ratio = min(1, (now - last_drop_time) / drop_cooldown)
+                indicator_radius = 30
+                indicator_center = (JAR_RIGHT + 60, JAR_TOP + 40)
+                pygame.draw.circle(screen, (100, 100, 100), indicator_center, indicator_radius, 3)
+                if cooldown_ratio < 1:
+                    # Draw cooldown fill (arc)
+                    end_angle = -math.pi / 2 + 2 * math.pi * cooldown_ratio
+                    pygame.draw.arc(
+                        screen,
+                        (0, 200, 255),
+                        (indicator_center[0] - indicator_radius, indicator_center[1] - indicator_radius, indicator_radius * 2, indicator_radius * 2),
+                        -math.pi / 2,
+                        end_angle,
+                        8
+                    )
+                else:
+                    # Ready: draw full circle
+                    pygame.draw.circle(screen, (0, 255, 0), indicator_center, indicator_radius - 6, 0)
+
+                # Draw "Next" fruit preview under cooldown
+                next_label = font.render("Next", True, (255, 255, 255))
+                screen.blit(next_label, (indicator_center[0] - next_label.get_width() // 2, indicator_center[1] + indicator_radius + 50))
+                next_fruit_y = indicator_center[1] + indicator_radius + 90  # Increased offset
+                pygame.draw.circle(
                     screen,
-                    (0, 200, 255),
-                    (indicator_center[0] - indicator_radius, indicator_center[1] - indicator_radius, indicator_radius * 2, indicator_radius * 2),
-                    -math.pi / 2,
-                    end_angle,
-                    8
+                    FRUITS[next_kind][1],
+                    (indicator_center[0], next_fruit_y),
+                    FRUITS[next_kind][0]
                 )
-            else:
-                # Ready: draw full circle
-                pygame.draw.circle(screen, (0, 255, 0), indicator_center, indicator_radius - 6, 0)
 
-            # Draw "Next" fruit preview under cooldown
-            next_label = font.render("Next", True, (255, 255, 255))
-            screen.blit(next_label, (indicator_center[0] - next_label.get_width() // 2, indicator_center[1] + indicator_radius + 50))
-            next_fruit_y = indicator_center[1] + indicator_radius + 90  # Increased offset
-            pygame.draw.circle(
-                screen,
-                FRUITS[next_kind][1],
-                (indicator_center[0], next_fruit_y),
-                FRUITS[next_kind][0]
-            )
+            # Draw game over warning if triggered
+            if game_over_triggered:
+                warning_text = big_font.render("GAME OVER!", True, (255, 0, 0))
+                screen.blit(warning_text, (WIDTH // 2 - warning_text.get_width() // 2, HEIGHT // 2 - 50))
+                time_left = 5 - (pygame.time.get_ticks() - game_over_time) // 1000
+                countdown_text = font.render(f"Continuing in {time_left}...", True, (255, 255, 255))
+                screen.blit(countdown_text, (WIDTH // 2 - countdown_text.get_width() // 2, HEIGHT // 2 + 20))
 
             score_text = font.render(f"Score: {score}", True, (255, 255, 0))
             screen.blit(score_text, (20, 20))
 
             pygame.display.flip()
             clock.tick(60)
+
 
         if running:
             state = STATE_GAME_OVER
