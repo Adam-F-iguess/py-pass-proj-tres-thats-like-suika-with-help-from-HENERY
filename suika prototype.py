@@ -9,6 +9,51 @@ WIDTH, HEIGHT = 600, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Suika Game Prototype")
 
+
+# Load sprites
+def load_sprite(filename):
+    try:
+        sprite_path = os.path.join("sprites", filename)
+        return pygame.image.load(sprite_path).convert_alpha()
+    except pygame.error:
+        print(f"Could not load {filename}")
+        return None
+
+def center_sprite(sprite):
+    """Centers the sprite by cropping to its non-transparent bounding box"""
+    if not sprite:
+        return None
+    
+    # Get the bounding rect of non-transparent pixels
+    mask = pygame.mask.from_surface(sprite)
+    bounding_rect = mask.get_bounding_rects()
+    
+    if not bounding_rect:
+        return sprite  # Return original if no non-transparent pixels found
+    
+    # Get the tightest bounding box
+    min_x = min(rect.left for rect in bounding_rect)
+    min_y = min(rect.top for rect in bounding_rect)
+    max_x = max(rect.right for rect in bounding_rect)
+    max_y = max(rect.bottom for rect in bounding_rect)
+    
+    # Crop to the bounding box
+    cropped_width = max_x - min_x
+    cropped_height = max_y - min_y
+    
+    # Create a new surface with the cropped size
+    cropped_sprite = pygame.Surface((cropped_width, cropped_height), pygame.SRCALPHA)
+    cropped_sprite.blit(sprite, (0, 0), (min_x, min_y, cropped_width, cropped_height))
+    
+    return cropped_sprite
+
+# Load cherry sprite
+cherry_sprite = load_sprite("cherry.png")
+if cherry_sprite:
+    cherry_sprite = center_sprite(cherry_sprite)  # Center the sprite first
+    cherry_sprite = pygame.transform.scale(cherry_sprite, (20, 20))  # Then scale it
+
+
 # Jar dimensions
 JAR_LEFT = 100
 JAR_TOP = 150
@@ -24,17 +69,18 @@ LEADERBOARD_FILE = "leaderboard.csv"
 
 # Fruit definitions: (radius, color, weight)
 FRUITS = [
-    (10, (220, 0, 0), 1),        # Cherry (red, tiny)
-    (11, (255, 80, 80), 2),      # Strawberry (lighter red, tiny)
-    (22, (160, 60, 200), 3),     # Grape (purple, small)
-    (23, (255, 220, 60), 4),     # Dekopon (yellow, small)
-    (34, (255, 140, 0), 6),      # Persimmon (orange, medium)
-    (44, (200, 0, 0), 8),        # Apple (red, medium)
-    (60, (255, 170, 200), 11),   # Peach (pink, large)
-    (70, (255, 230, 80), 14),    # Pineapple (yellow, large)
-    (80, (60, 200, 60), 18),     # Melon (green, very large)
-    (100, (20, 80, 40), 25),      # Watermelon (dark green, M A S S I V E)
+    (10, (220, 0, 0), 1, cherry_sprite),        # Cherry (red, tiny, with sprite)
+    (11, (255, 80, 80), 2, None),      # Strawberry (lighter red, tiny)
+    (22, (160, 60, 200), 3, None),     # Grape (purple, small)
+    (23, (255, 220, 60), 4, None),     # Dekopon (yellow, small)
+    (34, (255, 140, 0), 6, None),      # Persimmon (orange, medium)
+    (44, (200, 0, 0), 8, None),        # Apple (red, medium)
+    (60, (255, 170, 200), 11, None),   # Peach (pink, large)
+    (70, (255, 230, 80), 14, None),    # Pineapple (yellow, large)
+    (80, (60, 200, 60), 18, None),     # Melon (green, very large)
+    (100, (20, 80, 40), 25, None),      # Watermelon (dark green, M A S S I V E)
 ]
+
 
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 32)
@@ -43,8 +89,16 @@ big_font = pygame.font.SysFont(None, 48)
 class Fruit:
     def __init__(self, kind, x, y):
         self.kind = kind
-        self.radius, self.color, self.weight = FRUITS[kind]
-        self.hitbox_radius = self.radius + 1  # Reduced hitbox size to 1 pixel
+        self.radius, self.color, self.weight, self.sprite = FRUITS[kind]
+        
+        # Scale sprite to match fruit radius if it exists
+        if self.sprite:
+            sprite_size = self.radius * 2  # Diameter = radius * 2 (fixed from * 5)
+            # Center and scale the sprite
+            centered_sprite = center_sprite(self.sprite)
+            self.sprite = pygame.transform.scale(centered_sprite, (sprite_size, sprite_size))
+        
+        self.hitbox_radius = self.radius  + 1
         self.x = x
         self.y = y
         self.vx = 0
@@ -52,14 +106,15 @@ class Fruit:
         self.merged = False
         self.landed = False
 
+
     def update(self, fruits):
         self.vy += 0.7  # Increased gravity for quicker gameplay
         self.x += self.vx
         self.y += self.vy
 
-        # Floor collision (jar bottom)
-        if self.y + self.radius > JAR_BOTTOM:
-            self.y = JAR_BOTTOM - self.radius
+        # Floor collision (jar bottom) - use hitbox_radius for collision detection
+        if self.y + self.hitbox_radius > JAR_BOTTOM:
+            self.y = JAR_BOTTOM - self.hitbox_radius
             self.vy = 0
             self.landed = True
             self.vx *= 0.98  # Slightly less damping for quicker movements
@@ -73,16 +128,22 @@ class Fruit:
                 self.landed = False
                 self.vx = 0  # No sliding in the air
 
-        # Wall collision (jar sides)
-        if self.x - self.radius < JAR_LEFT:
-            self.x = JAR_LEFT + self.radius
-            self.vx = -self.vx * 0.6 if self.y + self.radius >= JAR_BOTTOM else 0
-        if self.x + self.radius > JAR_RIGHT:
-            self.x = JAR_RIGHT - self.radius
-            self.vx = -self.vx * 0.6 if self.y + self.radius >= JAR_BOTTOM else 0
+        # Wall collision (jar sides) - use hitbox_radius for collision detection
+        if self.x - self.hitbox_radius < JAR_LEFT:
+            self.x = JAR_LEFT + self.hitbox_radius
+            self.vx = -self.vx * 0.6 if self.y + self.hitbox_radius >= JAR_BOTTOM else 0
+        if self.x + self.hitbox_radius > JAR_RIGHT:
+            self.x = JAR_RIGHT - self.hitbox_radius
+            self.vx = -self.vx * 0.6 if self.y + self.hitbox_radius >= JAR_BOTTOM else 0
 
     def draw(self, surf):
-        pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.kind == 0 and self.sprite:  # Cherry with sprite
+            # Draw sprite centered on the fruit position
+            sprite_rect = self.sprite.get_rect(center=(int(self.x), int(self.y)))
+            surf.blit(self.sprite, sprite_rect)
+        else:
+            # Draw as circle for other fruits
+            pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), self.radius)
  
        
 def resolve_collision(f1, f2):
@@ -96,8 +157,8 @@ def resolve_collision(f1, f2):
 
         # Weight-based push: heavier fruits move less
         total_weight = f1.weight + f2.weight
-        move1 = (f2.weight / total_weight) * overlap * 0.4  # Reduced adjustment magnitude for smoother collisions
-        move2 = (f1.weight / total_weight) * overlap * 0.4
+        move1 = (f2.weight / total_weight) * overlap * 0.5  # Increased adjustment for better separation
+        move2 = (f1.weight / total_weight) * overlap * 0.5
 
         # Adjust positions to prevent clipping
         f1.x -= nx * move1
@@ -111,18 +172,19 @@ def resolve_collision(f1, f2):
         f2.vx *= 0.92
         f2.vy *= 0.92
 
-        # Clamp positions inside the jar
+        # Clamp positions inside the jar - use hitbox_radius for boundaries
         for f in (f1, f2):
-            if f.x - f.radius < JAR_LEFT:
-                f.x = JAR_LEFT + f.radius
+            if f.x - f.hitbox_radius < JAR_LEFT:
+                f.x = JAR_LEFT + f.hitbox_radius
                 f.vx = -f.vx * 0.5
-            if f.x + f.radius > JAR_RIGHT:
-                f.x = JAR_RIGHT - f.radius
+            if f.x + f.hitbox_radius > JAR_RIGHT:
+                f.x = JAR_RIGHT - f.hitbox_radius
                 f.vx = -f.vx * 0.5
-            if f.y + f.radius > JAR_BOTTOM:
-                f.y = JAR_BOTTOM - f.radius
+            if f.y + f.hitbox_radius > JAR_BOTTOM:
+                f.y = JAR_BOTTOM - f.hitbox_radius
                 f.vy = 0
                 f.landed = True
+
 
 def merge(f1, f2):
     # If not the last fruit, merge up as normal
@@ -242,6 +304,8 @@ while running:
         current_kind = random.randint(0, 4)
         current_fruit = Fruit(current_kind, JAR_LEFT + JAR_WIDTH // 2, JAR_TOP - 40)
         game_over = False
+        game_over_triggered = False
+        game_over_time = 0
         score = 0
         drop_cooldown = 2000
         last_drop_time = pygame.time.get_ticks() - drop_cooldown
@@ -254,12 +318,12 @@ while running:
                 if event.type == pygame.KEYDOWN and not game_over_triggered:
                     if event.key == pygame.K_LEFT:
                         current_fruit.x -= 20
-                        if current_fruit.x - current_fruit.radius < JAR_LEFT:
-                            current_fruit.x = JAR_LEFT + current_fruit.radius
+                        if current_fruit.x - current_fruit.hitbox_radius < JAR_LEFT:
+                            current_fruit.x = JAR_LEFT + current_fruit.hitbox_radius
                     if event.key == pygame.K_RIGHT:
                         current_fruit.x += 20
-                        if current_fruit.x + current_fruit.radius > JAR_RIGHT:
-                            current_fruit.x = JAR_RIGHT - current_fruit.radius
+                        if current_fruit.x + current_fruit.hitbox_radius > JAR_RIGHT:
+                            current_fruit.x = JAR_RIGHT - current_fruit.hitbox_radius
                     if event.key == pygame.K_SPACE:
                         now = pygame.time.get_ticks()
                         if now - last_drop_time >= drop_cooldown:
@@ -298,15 +362,15 @@ while running:
                 max_priority_passes = 5
                 priority_pass = 0
                 while priority_pass < max_priority_passes:
-                    # 1. Resolve wall collisions
+                    # 1. Resolve wall collisions - use hitbox_radius
                     wall_bounced = False
                     for fruit in fruits:
-                        if fruit.x - fruit.radius < JAR_LEFT:
-                            fruit.x = JAR_LEFT + fruit.radius
+                        if fruit.x - fruit.hitbox_radius < JAR_LEFT:
+                            fruit.x = JAR_LEFT + fruit.hitbox_radius
                             fruit.vx = -fruit.vx * 0.7  # Reduced bounce damping for quicker gameplay
                             wall_bounced = True
-                        if fruit.x + fruit.radius > JAR_RIGHT:
-                            fruit.x = JAR_RIGHT - fruit.radius
+                        if fruit.x + fruit.hitbox_radius > JAR_RIGHT:
+                            fruit.x = JAR_RIGHT - fruit.hitbox_radius
                             fruit.vx = -fruit.vx * 0.7
                             wall_bounced = True
                     if wall_bounced:
@@ -337,7 +401,7 @@ while running:
 
                 # --- GAME OVER CHECK ---
                 for fruit in fruits:
-                    if fruit.landed and fruit.y - fruit.radius < JAR_TOP + 10:
+                    if fruit.landed and fruit.y - fruit.hitbox_radius < JAR_TOP + 10:
                         game_over_triggered = True
                         game_over_time = pygame.time.get_ticks()
                         break
@@ -387,12 +451,23 @@ while running:
                 next_label = font.render("Next", True, (255, 255, 255))
                 screen.blit(next_label, (indicator_center[0] - next_label.get_width() // 2, indicator_center[1] + indicator_radius + 50))
                 next_fruit_y = indicator_center[1] + indicator_radius + 90  # Increased offset
-                pygame.draw.circle(
-                    screen,
-                    FRUITS[next_kind][1],
-                    (indicator_center[0], next_fruit_y),
-                    FRUITS[next_kind][0]
-                )
+                
+                # Draw next fruit with sprite if available
+                next_radius, next_color, next_weight, next_sprite = FRUITS[next_kind]
+                if next_sprite:
+                    # Center and scale sprite for next fruit preview
+                    centered_preview = center_sprite(next_sprite)
+                    preview_sprite = pygame.transform.scale(centered_preview, (next_radius * 2, next_radius * 2))  # Fixed from * 5
+                    sprite_rect = preview_sprite.get_rect(center=(indicator_center[0], next_fruit_y))
+                    screen.blit(preview_sprite, sprite_rect)
+                else:
+                    # Draw as circle for fruits without sprites
+                    pygame.draw.circle(
+                        screen,
+                        next_color,
+                        (indicator_center[0], next_fruit_y),
+                        next_radius
+                    )
 
             # Draw game over warning if triggered
             if game_over_triggered:
