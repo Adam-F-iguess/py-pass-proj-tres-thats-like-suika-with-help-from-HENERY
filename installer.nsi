@@ -5,9 +5,9 @@
 !define VERSIONMAJOR 1
 !define VERSIONMINOR 0
 !define VERSIONBUILD 0
-!define HELPURL "https://github.com/yourusername/bad-suika-game"
-!define UPDATEURL "https://github.com/yourusername/bad-suika-game"
-!define ABOUTURL "https://github.com/yourusername/bad-suika-game"
+!define HELPURL "https://github.com/Adam-F-iguess/py-pass-proj-tres-thats-like-suika-with-help-from-HENERY"
+!define UPDATEURL "https://github.com/Adam-F-iguess/py-pass-proj-tres-thats-like-suika-with-help-from-HENERY"
+!define ABOUTURL "https://github.com/Adam-F-iguess/py-pass-proj-tres-thats-like-suika-with-help-from-HENERY"
 !define INSTALLSIZE 50000
 
 RequestExecutionLevel admin
@@ -17,6 +17,13 @@ Icon "watermelon.ico"
 outFile "BadSuikaGameInstaller.exe"
 
 !include LogicLib.nsh
+!include "MUI2.nsh"
+
+; Variables for checkboxes
+Var LaunchCheckbox
+Var LaunchCheckboxHwnd
+Var ReleaseNotesCheckbox
+Var ReleaseNotesCheckboxHwnd
 
 !macro VerifyUserIsAdmin
 UserInfo::GetAccountType
@@ -32,8 +39,54 @@ function .onInit
     !insertmacro VerifyUserIsAdmin
 functionEnd
 
+; Custom finish page function
+Function FinishPage
+    !insertmacro MUI_HEADER_TEXT "Installation Complete" "Choose your next steps"
+    
+    nsDialogs::Create 1018
+    Pop $0
+    
+    ${If} $0 == error
+        Abort
+    ${EndIf}
+    
+    ; Create launch checkbox
+    ${NSD_CreateCheckbox} 10 20 100% 12u "Launch Bad Suika Game now"
+    Pop $LaunchCheckboxHwnd
+    ${NSD_SetState} $LaunchCheckboxHwnd ${BST_CHECKED}
+    
+    ; Create release notes checkbox  
+    ${NSD_CreateCheckbox} 10 40 100% 12u "View release notes on GitHub"
+    Pop $ReleaseNotesCheckboxHwnd
+    ${NSD_SetState} $ReleaseNotesCheckboxHwnd ${BST_UNCHECKED}
+    
+    ; Add some explanatory text
+    ${NSD_CreateLabel} 10 70 100% 24u "Thank you for installing Bad Suika Game!$\r$\nEnjoy dropping fruits and making combinations!"
+    Pop $0
+    
+    nsDialogs::Show
+FunctionEnd
+
+; Handle finish page actions
+Function FinishPageLeave
+    ; Get checkbox states
+    ${NSD_GetState} $LaunchCheckboxHwnd $LaunchCheckbox
+    ${NSD_GetState} $ReleaseNotesCheckboxHwnd $ReleaseNotesCheckbox
+    
+    ; Launch game if checkbox is checked
+    ${If} $LaunchCheckbox == ${BST_CHECKED}
+        ExecShell "" "$INSTDIR\Bad Suika Game.exe"
+    ${EndIf}
+    
+    ; Open release notes if checkbox is checked
+    ${If} $ReleaseNotesCheckbox == ${BST_CHECKED}
+        ExecShell "open" "https://github.com/Adam-F-iguess/py-pass-proj-tres-thats-like-suika-with-help-from-HENERY"
+    ${EndIf}
+FunctionEnd
+
 page directory
 page instfiles
+page custom FinishPage FinishPageLeave
 
 section "install"
     setOutPath $INSTDIR
@@ -73,8 +126,6 @@ section "install"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoRepair" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "EstimatedSize" ${INSTALLSIZE}
-    
-    MessageBox MB_OK "Installation complete! Bad Suika Game has been installed."
 sectionEnd
 
 section "uninstall"
