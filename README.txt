@@ -1,9 +1,7 @@
 Bad Suika Game - Installation Instructions
 
-1. Run install.bat as Administrator (right-click -> Run as Administrator)
-2. The game will be installed to your Desktop
-3. A desktop shortcut will be created
-4. Double-click the shortcut to play!
+WIN - use the badsuikagameinstaller.exe
+MAC - imma make an installer once i get my hands on one dw
 
 Controls:
 - Left/Right Arrow Keys: Move fruit
