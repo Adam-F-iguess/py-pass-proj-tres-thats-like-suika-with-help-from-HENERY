@@ -3,7 +3,18 @@ import random
 import math
 import csv
 import os
+import sys
+import platform
 
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 # Initialize Pygame
 pygame.init()
@@ -25,7 +36,7 @@ dragging_volume = False
 def load_music():
     global music_volume
     try:
-        music_path = os.path.join("music", "suika game music but bad yay.wav")
+        music_path = resource_path(os.path.join("music", "suika game music but bad yay.wav"))
         pygame.mixer.music.load(music_path)
         pygame.mixer.music.set_volume(music_volume)
         pygame.mixer.music.play(-1)
@@ -126,7 +137,7 @@ load_music()
 # Load sprites
 def load_sprite(filename):
     try:
-        sprite_path = os.path.join("sprites", filename)
+        sprite_path = resource_path(os.path.join("sprites", filename))
         return pygame.image.load(sprite_path).convert_alpha()
     except pygame.error:
         print(f"Could not load {filename}")
@@ -216,7 +227,11 @@ STATE_LEADERBOARD = 2
 STATE_GAME_OVER = 3
 STATE_HOWTO = 4
 STATE_CREDITS = 5
-LEADERBOARD_FILE = "leaderboard.csv"
+if platform.system() == "Darwin":  # macOS
+    LEADERBOARD_FILE = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "BadSuikaGame", "leaderboard.csv")
+else:  # Windows and others
+    LEADERBOARD_FILE = os.path.join(os.path.expanduser("~"), "Documents", "BadSuikaGame", "leaderboard.csv")
+
 
 # Fruit definitions: (radius, color, weight)
 FRUITS = [
@@ -440,6 +455,9 @@ def is_supported(fruit, fruits):
     return False
 
 def load_leaderboard():
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(LEADERBOARD_FILE), exist_ok=True)
+    
     if not os.path.exists(LEADERBOARD_FILE):
         return []
     with open(LEADERBOARD_FILE, newline='') as f:
@@ -447,6 +465,9 @@ def load_leaderboard():
         return [(row[0], int(row[1])) for row in reader]
 
 def save_score(name, score):
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(LEADERBOARD_FILE), exist_ok=True)
+    
     scores = load_leaderboard()
     scores.append((name, score))
     # Sort descending by score
@@ -457,6 +478,8 @@ def save_score(name, score):
         for entry in scores:
             writer.writerow(entry)
     return scores
+
+
 
 fruits = []
 # When spawning a new fruit, drop it above the jar
