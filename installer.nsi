@@ -12,12 +12,12 @@
 
 RequestExecutionLevel admin
 InstallDir "$PROGRAMFILES\${APPNAME}"
-LicenseData "LICENSE.txt"
 Name "${APPNAME}"
 Icon "watermelon.ico"
 outFile "BadSuikaGameInstaller.exe"
 
 !include LogicLib.nsh
+
 !macro VerifyUserIsAdmin
 UserInfo::GetAccountType
 pop $0
@@ -32,25 +32,32 @@ function .onInit
     !insertmacro VerifyUserIsAdmin
 functionEnd
 
-page license
 page directory
 page instfiles
 
-!macro uninstall.log
-!macroend
-
 section "install"
     setOutPath $INSTDIR
-    file "dist\Bad Suika Game.exe"
-    file "watermelon.ico"
-    file "README.txt"
     
-    writeUninstaller "$INSTDIR\uninstall.exe"
+    ; File commands with proper error handling
+    ; The file command uses relative paths from where makensis is run
+    File "dist\Bad Suika Game.exe"
     
-    createDirectory "$SMPROGRAMS\${APPNAME}"
-    createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\Bad Suika Game.exe" "" "$INSTDIR\watermelon.ico"
-    createShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\Bad Suika Game.exe" "" "$INSTDIR\watermelon.ico"
+    ; Optional files (won't cause errors if missing)
+    IfFileExists "watermelon.ico" 0 +2
+    File "watermelon.ico"
     
+    IfFileExists "README.txt" 0 +2
+    File "README.txt"
+    
+    ; Create uninstaller
+    WriteUninstaller "$INSTDIR\uninstall.exe"
+    
+    ; Create shortcuts
+    CreateDirectory "$SMPROGRAMS\${APPNAME}"
+    CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\Bad Suika Game.exe" "" "$INSTDIR\watermelon.ico"
+    CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\Bad Suika Game.exe" "" "$INSTDIR\watermelon.ico"
+    
+    ; Registry entries for Add/Remove Programs
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME}"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
@@ -66,19 +73,23 @@ section "install"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoRepair" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "EstimatedSize" ${INSTALLSIZE}
+    
+    MessageBox MB_OK "Installation complete! Bad Suika Game has been installed."
 sectionEnd
 
 section "uninstall"
-    delete "$INSTDIR\Bad Suika Game.exe"
-    delete "$INSTDIR\watermelon.ico"
-    delete "$INSTDIR\README.txt"
-    delete "$INSTDIR\uninstall.exe"
+    Delete "$INSTDIR\Bad Suika Game.exe"
+    Delete "$INSTDIR\watermelon.ico"
+    Delete "$INSTDIR\README.txt"
+    Delete "$INSTDIR\uninstall.exe"
     
-    delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
-    rmDir "$SMPROGRAMS\${APPNAME}"
-    delete "$DESKTOP\${APPNAME}.lnk"
+    Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
+    RMDir "$SMPROGRAMS\${APPNAME}"
+    Delete "$DESKTOP\${APPNAME}.lnk"
     
-    rmDir "$INSTDIR"
+    RMDir "$INSTDIR"
     
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+    
+    MessageBox MB_OK "Uninstallation complete!"
 sectionEnd
