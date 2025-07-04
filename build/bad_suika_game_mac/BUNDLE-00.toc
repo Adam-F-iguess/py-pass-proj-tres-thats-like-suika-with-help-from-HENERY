@@ -1,0 +1,4 @@
+([('Bad Suika Game',
+   '/Users/krish/Documents/py-pass-proj-tres-thats-like-suika-with-help-from-HENERY/dist/Bad '
+   'Suika Game',
+   'EXECUTABLE')],)
